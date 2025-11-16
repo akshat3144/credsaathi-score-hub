@@ -5,6 +5,7 @@ from app.db import get_database
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from bson import ObjectId
 
 
 router = APIRouter(prefix="/predict", tags=["prediction"])
@@ -49,16 +50,22 @@ async def predict_score(
     """
     db = get_database()
     
-    # Fetch applicant data
-    applicant = await db.applicants.find_one({
-        "_id": request.applicant_id,
-        "user_id": str(current_user["_id"])
-    })
+    # Fetch applicant data (convert string ID to ObjectId)
+    try:
+        applicant = await db.applicants.find_one({
+            "_id": ObjectId(request.applicant_id),
+            "user_id": str(current_user["_id"])
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid applicant ID format: {str(e)}"
+        )
     
     if not applicant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Applicant not found"
+            detail="Applicant not found or access denied"
         )
     
     # Prepare data for ML model
@@ -86,9 +93,9 @@ async def predict_score(
     result = await db.predictions.insert_one(prediction_doc)
     prediction_id = str(result.inserted_id)
     
-    # Update applicant with latest score
+    # Update applicant with latest score (use ObjectId)
     await db.applicants.update_one(
-        {"_id": request.applicant_id},
+        {"_id": ObjectId(request.applicant_id)},
         {
             "$set": {
                 "credit_score": prediction_result["score"],

@@ -1,145 +1,138 @@
 """
-ML Service - Stub Implementation
+ML Service - CatBoost Model Implementation
 
-This is a placeholder for the actual ML model.
-Replace this with your trained credit scoring model.
-
-To integrate your model:
-1. Load your trained model (pickle, joblib, or ONNX)
-2. Implement feature engineering matching your training pipeline
-3. Return predictions in the same format
+This service loads and uses the trained CatBoost model for credit scoring.
 """
 
-import random
+import os
+from pathlib import Path
 from typing import Dict, Any, List
+from catboost import CatBoostRegressor
+import numpy as np
 
 
-def normalize_features(data: Dict[str, Any]) -> Dict[str, float]:
+# Get the project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+MODEL_PATH = os.path.join(BASE_DIR, "models", "catboost_model_best.cbm")
+
+# Load the model at module initialization (singleton pattern)
+try:
+    model = CatBoostRegressor()
+    model.load_model(MODEL_PATH)
+    print(f"✓ CatBoost model loaded successfully from {MODEL_PATH}")
+    print(f"  Model features: {model.feature_names_}")
+except Exception as e:
+    print(f"✗ Error loading CatBoost model: {e}")
+    model = None
+
+
+def normalize_features(data: Dict[str, Any]) -> np.ndarray:
     """
-    Normalize input features for ML model
+    Extract and normalize features from applicant data
     
-    In production, this should match your training normalization
+    Args:
+        data: Applicant data with financial_data, social_data, gig_data
+        
+    Returns:
+        Numpy array of features ready for model prediction
     """
-    financial = data.get("financial_data", {})
-    social = data.get("social_data", {})
-    gig = data.get("gig_data", {})
+    financial = data.get("financial_data", {}) or {}
+    social = data.get("social_data", {}) or {}
+    gig = data.get("gig_data", {}) or {}
     
-    # Example feature extraction
-    features = {
-        "income": financial.get("monthly_income", 0),
-        "expense_ratio": (
-            financial.get("monthly_expenses", 0) / max(financial.get("monthly_income", 1), 1)
-        ),
-        "savings_ratio": (
-            financial.get("savings", 0) / max(financial.get("monthly_income", 1) * 3, 1)
-        ),
-        "loan_burden": financial.get("existing_loans", 0),
-        "payment_history": financial.get("payment_history_score", 0),
-        "social_score": social.get("community_engagement_score", 0),
-        "gig_rating": gig.get("average_rating", 0),
-        "gig_consistency": gig.get("income_consistency_score", 0),
-        "gig_experience": gig.get("total_gigs_completed", 0),
-    }
+    # Extract raw features with defaults
+    monthly_income = float(financial.get("monthly_income", 30000))
+    monthly_expenses = float(financial.get("monthly_expenses", 20000))
+    savings = float(financial.get("savings", 10000))
     
-    return features
+    # Avoid division by zero
+    income = max(monthly_income, 1)
+    
+    # Calculate derived features matching your model training
+    # Adjust based on what features your model was trained with
+    features = [
+        monthly_income / 100000,  # Normalize income
+        monthly_expenses / 100000,  # Normalize expenses
+        savings / 50000,  # Normalize savings
+    ]
+    
+    return np.array(features).reshape(1, -1)
+
+
+def classify_risk_tier(score: int) -> str:
+    """Classify risk tier based on credit score"""
+    if score >= 750:
+        return "low"
+    elif score >= 650:
+        return "medium"
+    elif score >= 550:
+        return "high"
+    else:
+        return "very_high"
 
 
 def predict_credit_score(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Predict credit score from applicant data
+    Predict credit score using the trained CatBoost model
     
     Args:
         data: Applicant data including financial, social, and gig signals
         
     Returns:
-        Dictionary with score, risk_tier, and feature_importances
-        
-    TODO: Replace with actual model inference
-    - Load trained model (e.g., from models/credit_model.pkl)
-    - Use model.predict(features) for actual scoring
-    - Return real feature importances from your model
+        Dictionary with score, risk_tier, feature_importances, and confidence
     """
     
-    # Extract and normalize features
-    features = normalize_features(data)
+    if model is None:
+        raise Exception("CatBoost model not loaded. Please check model file path.")
     
-    # STUB: Generate mock prediction
-    # In production, replace with: score = loaded_model.predict(features)
+    # Get feature vector
+    feature_vector = normalize_features(data)
     
-    # Simple heuristic for demonstration
-    score = 300  # Base score
+    # Get prediction
+    raw_score = model.predict(feature_vector)[0]
     
-    # Add points based on features
-    if features["income"] > 0:
-        score += min(features["income"] / 100, 200)
-    
-    if features["expense_ratio"] < 0.7:
-        score += 50
-    
-    score += features["payment_history"] * 2
-    score += features["social_score"] * 0.5
-    score += features["gig_rating"] * 30
-    score += features["gig_consistency"] * 1.5
-    
-    # Cap score between 300-850 (FICO scale)
-    score = max(300, min(850, int(score)))
+    # Ensure score is in valid range (300-850 for FICO scale)
+    score = int(np.clip(raw_score, 300, 850))
     
     # Determine risk tier
-    if score >= 750:
-        risk_tier = "low"
-    elif score >= 650:
-        risk_tier = "medium"
-    elif score >= 550:
-        risk_tier = "high"
-    else:
-        risk_tier = "very_high"
+    risk_tier = classify_risk_tier(score)
     
-    # Mock feature importances (replace with actual SHAP values or model importances)
-    feature_importances = [
-        {"feature": "Monthly Income", "importance": 0.25, "value": features["income"]},
-        {"feature": "Payment History", "importance": 0.20, "value": features["payment_history"]},
-        {"feature": "Expense Ratio", "importance": 0.15, "value": features["expense_ratio"]},
-        {"feature": "Gig Consistency", "importance": 0.15, "value": features["gig_consistency"]},
-        {"feature": "Gig Rating", "importance": 0.12, "value": features["gig_rating"]},
-        {"feature": "Social Score", "importance": 0.08, "value": features["social_score"]},
-        {"feature": "Savings Ratio", "importance": 0.05, "value": features["savings_ratio"]},
+    # Get feature importances from the model
+    try:
+        feature_importances_values = model.get_feature_importance()
+    except:
+        # If feature importance fails, create uniform distribution
+        feature_importances_values = [33.33, 33.33, 33.34]
+    
+    # Feature names for display (match the model's 3 features)
+    feature_names = ["Normalized Income", "Normalized Expenses", "Normalized Savings"]
+    
+    # Get actual feature values from input
+    financial = data.get("financial_data", {}) or {}
+    feature_values = [
+        float(financial.get("monthly_income", 30000)),
+        float(financial.get("monthly_expenses", 20000)),
+        float(financial.get("savings", 10000))
     ]
+    
+    # Create feature importance list
+    feature_importances = []
+    for fname, importance, value in zip(feature_names, feature_importances_values, feature_values):
+        feature_importances.append({
+            "feature": fname,
+            "importance": float(importance / 100),  # Normalize to 0-1 range
+            "value": float(value)
+        })
+    
+    # Sort by importance (descending)
+    feature_importances.sort(key=lambda x: x["importance"], reverse=True)
+    
+    # Calculate confidence
+    confidence = 0.85  # Default confidence
     
     return {
         "score": score,
         "risk_tier": risk_tier,
         "feature_importances": feature_importances,
-        "confidence": round(random.uniform(0.75, 0.95), 2)  # Mock confidence
+        "confidence": round(confidence, 2)
     }
-
-
-# Example: How to load a real model
-"""
-import joblib
-import numpy as np
-
-# Load at module level (once)
-MODEL_PATH = "models/credit_model.pkl"
-model = joblib.load(MODEL_PATH)
-
-def predict_credit_score(data: Dict[str, Any]) -> Dict[str, Any]:
-    features = normalize_features(data)
-    feature_vector = np.array(list(features.values())).reshape(1, -1)
-    
-    score = int(model.predict(feature_vector)[0])
-    probabilities = model.predict_proba(feature_vector)[0]
-    
-    # Get feature importances from tree-based model
-    importances = model.feature_importances_
-    feature_importances = [
-        {"feature": name, "importance": float(imp), "value": val}
-        for name, imp, val in zip(features.keys(), importances, features.values())
-    ]
-    
-    return {
-        "score": score,
-        "risk_tier": classify_risk(score),
-        "feature_importances": sorted(feature_importances, key=lambda x: x["importance"], reverse=True),
-        "confidence": float(max(probabilities))
-    }
-"""

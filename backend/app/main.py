@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.db import connect_to_mongo, close_mongo_connection
@@ -21,6 +22,16 @@ app = FastAPI(
     description="AI-powered credit scoring platform for gig workers",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Session middleware for OAuth (must be added before other middleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key,
+    session_cookie="session",
+    max_age=3600,  # 1 hour
+    same_site="lax",
+    https_only=False  # Set to True in production with HTTPS
 )
 
 # CORS middleware
