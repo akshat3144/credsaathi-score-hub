@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     
     # Optional
     sentry_dsn: Optional[str] = None
+
+    # Gemini API
+    gemini_api_key: str
     
     model_config = SettingsConfigDict(
         env_file=".env",

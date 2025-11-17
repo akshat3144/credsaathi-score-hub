@@ -1,4 +1,12 @@
 import { useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { useInsights } from "@/hooks/useInsights";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import ApplicantCard from "@/components/ApplicantCard";
@@ -37,6 +45,16 @@ const Dashboard = () => {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTier, setFilterTier] = useState<string>("all");
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(
+    null
+  );
+  const {
+    insights,
+    loading: insightsLoading,
+    error: insightsError,
+    fetchInsights,
+  } = useInsights();
 
   useEffect(() => {
     fetchApplicants();
@@ -78,7 +96,9 @@ const Dashboard = () => {
   const handleViewDetails = (applicantId: string) => {
     const applicant = applicants.find((a) => a.id === applicantId);
     if (applicant) {
-      navigate("/result", { state: { applicant } });
+      setSelectedApplicant(applicant);
+      setInsightsOpen(true);
+      fetchInsights(applicant);
     }
   };
 
@@ -124,9 +144,85 @@ const Dashboard = () => {
     },
   ];
 
+  // Render a section as a table
+  function renderTable(obj: any): JSX.Element {
+    if (!obj || typeof obj !== "object") return <span>{String(obj)}</span>;
+    return (
+      <table className="min-w-full border text-sm mb-2">
+        <tbody>
+          {Object.entries(obj).map(([k, v]) => (
+            <tr key={k} className="border-b last:border-b-0">
+              <td className="font-medium px-2 py-1 whitespace-nowrap align-top bg-muted/30">
+                {k.replace(/_/g, " ")}
+              </td>
+              <td className="px-2 py-1 align-top">
+                {Array.isArray(v)
+                  ? v.map((item, idx) => (
+                      <span key={idx} className="inline-block mr-1">
+                        {typeof item === "object"
+                          ? JSON.stringify(item)
+                          : String(item)}
+                        {idx < v.length - 1 ? ", " : ""}
+                      </span>
+                    ))
+                  : typeof v === "object" && v !== null
+                  ? renderTable(v)
+                  : String(v)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+
+      {/* Insights Dialog */}
+      <Dialog open={insightsOpen} onOpenChange={setInsightsOpen}>
+        <DialogContent className="max-w-6xl w-full overflow-y-auto max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Borrower Intelligence Report</DialogTitle>
+            <DialogDescription>
+              {selectedApplicant ? selectedApplicant.name : "Applicant"}
+            </DialogDescription>
+          </DialogHeader>
+          {insightsLoading && <div>Loading insights...</div>}
+          {insightsError && (
+            <div className="text-destructive">{insightsError}</div>
+          )}
+          {insights && (
+            <div className="space-y-4">
+              {Object.entries(insights).map(([section, value]) => {
+                // Render dashboard_output as a summary card, others as tables
+                if (section === "dashboard_output") {
+                  return (
+                    <div
+                      key={section}
+                      className="border rounded p-3 bg-muted/10"
+                    >
+                      <div className="font-semibold mb-1 text-lg">
+                        Decision & Summary
+                      </div>
+                      {renderTable(value)}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={section} className="border rounded p-3">
+                    <div className="font-semibold mb-1 text-base">
+                      {section.replace(/_/g, " ")}
+                    </div>
+                    {renderTable(value)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8 flex items-center justify-between">

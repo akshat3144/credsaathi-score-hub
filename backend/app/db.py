@@ -1,3 +1,9 @@
+from fastapi import Depends
+
+# FastAPI dependency for database
+def get_db():
+    db = get_database()
+    yield db
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config import settings
 from typing import Optional

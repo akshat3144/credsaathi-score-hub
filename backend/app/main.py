@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.db import connect_to_mongo, close_mongo_connection
 from app.routers import auth, users, ingest, predict
+from app.routers import insights
 
 
 @asynccontextmanager
@@ -48,6 +49,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(ingest.router)
 app.include_router(predict.router)
+app.include_router(insights.router)
 
 
 @app.get("/")
