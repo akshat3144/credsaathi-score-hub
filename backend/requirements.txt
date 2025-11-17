@@ -12,7 +12,6 @@ python-dotenv
 catboost
 email-validator
 starlette
-bson
 requests
 numpy
 itsdangerous
