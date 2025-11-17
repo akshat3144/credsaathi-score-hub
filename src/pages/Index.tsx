@@ -64,7 +64,8 @@ const Index = () => {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-accent px-4">
       <div className="text-center">
-        <h1 className="mb-4 text-5xl font-bold text-primary">CredSaathi</h1>
+        <img src="/logo.png" alt="CredSaathi Logo" className="mx-auto w-72 h-72 object-contain" />
+        {/* <h1 className="mb-4 text-5xl font-bold text-primary">CredSaathi</h1> */}
         <p className="mb-8 text-xl text-muted-foreground">
           AI-powered credit scoring for the gig economy
         </p>
